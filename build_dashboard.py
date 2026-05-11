@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the Prodigy pre-paid DBU burn-down Lakeview dashboard.
+"""Build the pre-paid DBU burn-down Lakeview dashboard.
 
 All workspace-specific values (warehouse, parent path, profile, output path) and
 contract values (start date, term, amount, expected annual burn) are passed in
@@ -69,7 +69,7 @@ args = parse_args()
 sys.path.insert(0, args.lakeview_builder_path)
 from lakeview_builder import LakeviewDashboard  # noqa: E402
 
-# Brand-ish colors (Prodigy uses blue-ish palette on prodigygame.com)
+# Default palette — swap to match the customer's brand colors if desired.
 P_BLUE   = "#1F3A93"
 P_CYAN   = "#39C0ED"
 P_GREEN  = "#00A972"
@@ -121,7 +121,7 @@ priced_usage AS (
 )
 """
 
-d = LakeviewDashboard("Prodigy — Pre-paid DBU Burn-down")
+d = LakeviewDashboard("Pre-paid DBU Burn-down")
 d.pages = []
 d.add_page("Burn-down")
 

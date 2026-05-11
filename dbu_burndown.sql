@@ -1,5 +1,5 @@
 -- ============================================================================
--- PRODIGY — Pre-paid DBU Burn-down (base query)
+-- Pre-paid DBU Burn-down (base query)
 --
 -- >>> EDIT THE TWO CTEs AT THE TOP (`contract`, `discounts`) WITH YOUR <<<
 -- >>> NEGOTIATED CONTRACT TERMS BEFORE RUNNING.                          <<<

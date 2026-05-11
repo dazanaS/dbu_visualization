@@ -1,4 +1,4 @@
-# Prodigy — Pre-paid DBU Burn-down
+# Pre-paid DBU Burn-down
 
 Dashboard + base SQL template showing how a customer is burning down their pre-paid DBU pool per month, broken out by workload / SKU group, based on Databricks `system.billing` system tables.
 
@@ -12,7 +12,7 @@ All customer-specific values are **parameterized** — you supply them at build 
 
 The two CTEs at the top of every query (`contract`, `discounts`) drive every widget. You supply them in one of two ways:
 
-**Option A — `prodigy_burndown.sql` (ad-hoc runs):** Open the file and replace the placeholder tokens in the `contract` and `discounts` CTEs:
+**Option A — `dbu_burndown.sql` (ad-hoc runs):** Open the file and replace the placeholder tokens in the `contract` and `discounts` CTEs:
 
 ```sql
 WITH contract AS (
@@ -98,7 +98,7 @@ The generated `dashboard_payload.json` is intentionally **not** checked in (see 
 
 ## Deploying
 
-1. Edit the discount values inside `build_dashboard.py` (or `prodigy_burndown.sql`) to reflect the customer's negotiated rates.
+1. Edit the discount values inside `build_dashboard.py` (or `dbu_burndown.sql`) to reflect the customer's negotiated rates.
 2. Run `build_dashboard.py` with the customer's contract terms and target workspace's warehouse ID + parent path (see above).
 3. Post the generated payload to the customer's workspace:
    ```bash
@@ -112,7 +112,7 @@ The generated `dashboard_payload.json` is intentionally **not** checked in (see 
 ```
 .
 ├── README.md              # this file
-├── prodigy_burndown.sql   # the stand-alone base query (for ad-hoc runs)
+├── dbu_burndown.sql   # the stand-alone base query (for ad-hoc runs)
 ├── build_dashboard.py     # script that assembles the Lakeview JSON
 └── dashboard_payload.json # assembled dashboard payload (generated; gitignored)
 ```
