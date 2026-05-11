@@ -2,6 +2,8 @@
 
 Dashboard + base SQL template showing how a customer is burning down their pre-paid DBU pool per month, broken out by workload / SKU group, based on Databricks `system.billing` system tables.
 
+![Dashboard preview](dashboard-preview.png)
+
 ## What you edit before running
 
 All customer-specific values are **parameterized** — you supply them at build time. There are no hardcoded workspace IDs, paths, or contract values shipped in this repo.
