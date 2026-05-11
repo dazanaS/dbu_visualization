@@ -1,45 +1,49 @@
 -- ============================================================================
 -- PRODIGY — Pre-paid DBU Burn-down (base query)
 --
--- Edit the two CTEs at the top (`contract`, `discounts`) with Prodigy's
--- negotiated terms. Everything else auto-computes from system.billing.
+-- >>> EDIT THE TWO CTEs AT THE TOP (`contract`, `discounts`) WITH YOUR <<<
+-- >>> NEGOTIATED CONTRACT TERMS BEFORE RUNNING.                          <<<
+--
+-- Everything else auto-computes from system.billing.
 --
 -- Assumes the caller has SELECT on system.billing.usage and
 -- system.billing.list_prices (enabled by default for workspace admins).
 -- ============================================================================
 
 WITH contract AS (
+  -- >>> REPLACE THESE VALUES WITH YOUR CONTRACT TERMS <<<
   SELECT
-    DATE '2025-01-01'        AS contract_start,
-    3                         AS contract_years,
-    CAST(3000000  AS DOUBLE) AS contract_amount_usd,      -- initial $ signed
-    CAST(1000000  AS DOUBLE) AS expected_annual_dbu_usd   -- expected yearly burn
+    DATE '<contract_start_date>'                       AS contract_start,         -- YYYY-MM-DD, contract effective date
+    <contract_term_in_years>                            AS contract_years,         -- e.g. 3
+    CAST(<total_contract_amount_usd>  AS DOUBLE)        AS contract_amount_usd,    -- e.g. 3000000
+    CAST(<expected_annual_burn_usd>   AS DOUBLE)        AS expected_annual_dbu_usd -- e.g. 1000000
 ),
 
+-- >>> REPLACE THESE DISCOUNT VALUES WITH YOUR NEGOTIATED RATES <<<
 -- Per-product-group discount off list price.
 -- 0.00 = no discount, 0.30 = 30% off.
 -- Anything not listed defaults to 0 via the LEFT JOIN below.
 discounts AS (
   SELECT * FROM (VALUES
-    ('ALL_PURPOSE',             0.25),
-    ('INTERACTIVE',             0.25),
-    ('JOBS',                    0.30),
-    ('DLT',                     0.30),
-    ('SQL',                     0.35),
-    ('MODEL_SERVING',           0.20),
-    ('VECTOR_SEARCH',           0.15),
-    ('AI_FUNCTIONS',            0.15),
-    ('AI_GATEWAY',              0.15),
-    ('AGENT_BRICKS',            0.15),
-    ('AGENT_EVALUATION',        0.15),
-    ('SUPERVISOR_AGENT',        0.15),
-    ('DATA_QUALITY_MONITORING', 0.10),
-    ('LAKEHOUSE_MONITORING',    0.10),
-    ('PREDICTIVE_OPTIMIZATION', 0.10),
-    ('LAKEFLOW_CONNECT',        0.10),
-    ('LAKEBASE',                0.10),
-    ('DATABASE',                0.10),
-    ('APPS',                    0.10)
+    ('ALL_PURPOSE',             0.00),
+    ('INTERACTIVE',             0.00),
+    ('JOBS',                    0.00),
+    ('DLT',                     0.00),
+    ('SQL',                     0.00),
+    ('MODEL_SERVING',           0.00),
+    ('VECTOR_SEARCH',           0.00),
+    ('AI_FUNCTIONS',            0.00),
+    ('AI_GATEWAY',              0.00),
+    ('AGENT_BRICKS',            0.00),
+    ('AGENT_EVALUATION',        0.00),
+    ('SUPERVISOR_AGENT',        0.00),
+    ('DATA_QUALITY_MONITORING', 0.00),
+    ('LAKEHOUSE_MONITORING',    0.00),
+    ('PREDICTIVE_OPTIMIZATION', 0.00),
+    ('LAKEFLOW_CONNECT',        0.00),
+    ('LAKEBASE',                0.00),
+    ('DATABASE',                0.00),
+    ('APPS',                    0.00)
   ) AS d(product_group, discount_pct)
 ),
 

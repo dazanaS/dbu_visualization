@@ -1,12 +1,73 @@
 #!/usr/bin/env python3
-"""Build the Prodigy pre-paid DBU burn-down Lakeview dashboard."""
-import sys, json, subprocess
-sys.path.insert(0, "/Users/dazana.hasan/.vibe/marketplace/plugins/fe-databricks-tools/skills/databricks-lakeview-dashboard/resources")
-from lakeview_builder import LakeviewDashboard
+"""Build the Prodigy pre-paid DBU burn-down Lakeview dashboard.
 
-WAREHOUSE_ID = "a82088b3bfe8752c"
-PARENT_PATH = "/Users/dazana.hasan@databricks.com"
-PROFILE = "Dazana-classic-ws-pat"
+All workspace-specific values (warehouse, parent path, profile, output path) and
+contract values (start date, term, amount, expected annual burn) are passed in
+as CLI args or environment variables. Discounts are kept inline in the CORE_CTE
+below — edit the VALUES list to reflect the customer's negotiated rates.
+
+Usage:
+    python3 build_dashboard.py \\
+        --warehouse-id <warehouse_id> \\
+        --parent-path /Users/you@example.com \\
+        --contract-start 2025-01-01 \\
+        --contract-years 3 \\
+        --contract-amount 3000000 \\
+        --expected-annual-burn 1000000 \\
+        --output ./dashboard_payload.json
+
+Environment variable equivalents (CLI args take precedence):
+    DBU_WAREHOUSE_ID, DBU_PARENT_PATH, DBU_PROFILE, DBU_OUTPUT_PATH,
+    DBU_CONTRACT_START, DBU_CONTRACT_YEARS, DBU_CONTRACT_AMOUNT,
+    DBU_EXPECTED_ANNUAL_BURN, LAKEVIEW_BUILDER_PATH
+"""
+import argparse
+import json
+import os
+import sys
+
+
+def parse_args():
+    p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    p.add_argument("--warehouse-id", default=os.environ.get("DBU_WAREHOUSE_ID"),
+                   help="Databricks SQL warehouse ID the dashboard will run against.")
+    p.add_argument("--parent-path", default=os.environ.get("DBU_PARENT_PATH"),
+                   help="Workspace parent folder (e.g. /Users/you@example.com).")
+    p.add_argument("--profile", default=os.environ.get("DBU_PROFILE"),
+                   help="Databricks CLI profile name (reserved for downstream deploy steps).")
+    p.add_argument("--output", default=os.environ.get("DBU_OUTPUT_PATH", "./dashboard_payload.json"),
+                   help="Path to write the generated dashboard payload JSON.")
+    p.add_argument("--contract-start", default=os.environ.get("DBU_CONTRACT_START"),
+                   help="Contract effective date in YYYY-MM-DD format.")
+    p.add_argument("--contract-years", type=int, default=int(os.environ.get("DBU_CONTRACT_YEARS", 0)) or None,
+                   help="Contract term in years.")
+    p.add_argument("--contract-amount", type=float,
+                   default=float(os.environ.get("DBU_CONTRACT_AMOUNT", 0)) or None,
+                   help="Total contract amount in USD.")
+    p.add_argument("--expected-annual-burn", type=float,
+                   default=float(os.environ.get("DBU_EXPECTED_ANNUAL_BURN", 0)) or None,
+                   help="Expected annual DBU burn in USD.")
+    p.add_argument("--lakeview-builder-path",
+                   default=os.environ.get("LAKEVIEW_BUILDER_PATH",
+                                          os.path.expanduser("~/.vibe/marketplace/plugins/fe-databricks-tools/skills/databricks-lakeview-dashboard/resources")),
+                   help="Filesystem path to the lakeview_builder module.")
+    args = p.parse_args()
+    missing = [n for n, v in [
+        ("--warehouse-id", args.warehouse_id),
+        ("--parent-path", args.parent_path),
+        ("--contract-start", args.contract_start),
+        ("--contract-years", args.contract_years),
+        ("--contract-amount", args.contract_amount),
+        ("--expected-annual-burn", args.expected_annual_burn),
+    ] if not v]
+    if missing:
+        p.error(f"Missing required values: {', '.join(missing)}")
+    return args
+
+
+args = parse_args()
+sys.path.insert(0, args.lakeview_builder_path)
+from lakeview_builder import LakeviewDashboard  # noqa: E402
 
 # Brand-ish colors (Prodigy uses blue-ish palette on prodigygame.com)
 P_BLUE   = "#1F3A93"
@@ -20,15 +81,17 @@ PALETTE = [P_BLUE, P_CYAN, P_GREEN, P_AMBER, P_RED, P_GREY,
 
 # ---------------------------------------------------------------------------
 # Shared CTE prefix so every dataset can override `contract` / `discounts` with
-# dashboard parameters or keep the hardcoded defaults.
+# dashboard parameters or keep the supplied defaults.
+#
+# >>> EDIT THE DISCOUNTS VALUES BELOW TO REFLECT THE CUSTOMER'S NEGOTIATED RATES <<<
 # ---------------------------------------------------------------------------
-CORE_CTE = """
+CORE_CTE = f"""
 WITH contract AS (
   SELECT
-    DATE '2025-01-01'        AS contract_start,
-    3                         AS contract_years,
-    CAST(3000000  AS DOUBLE) AS contract_amount_usd,
-    CAST(1000000  AS DOUBLE) AS expected_annual_dbu_usd
+    DATE '{args.contract_start}'              AS contract_start,
+    {args.contract_years}                      AS contract_years,
+    CAST({args.contract_amount}  AS DOUBLE)   AS contract_amount_usd,
+    CAST({args.expected_annual_burn}  AS DOUBLE) AS expected_annual_dbu_usd
 ),
 discounts AS (
   SELECT * FROM (VALUES
@@ -214,12 +277,11 @@ d.add_table("detail",
 # ---------------------------------------------------------------------------
 payload = {
     "display_name": d.name,
-    "warehouse_id": WAREHOUSE_ID,
-    "parent_path": PARENT_PATH,
+    "warehouse_id": args.warehouse_id,
+    "parent_path": args.parent_path,
     "serialized_dashboard": d.to_json()
 }
-path = "/Users/dazana.hasan/Documents/Vibe_setup/prodigy_burndown/dashboard_payload.json"
-with open(path, "w") as f:
+with open(args.output, "w") as f:
     json.dump(payload, f)
-print(f"Wrote payload ({len(payload['serialized_dashboard'])} bytes)")
+print(f"Wrote payload to {args.output} ({len(payload['serialized_dashboard'])} bytes)")
 print(f"Datasets: {[ds['name'] for ds in d.datasets]}")

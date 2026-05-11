@@ -1,43 +1,46 @@
 # Prodigy — Pre-paid DBU Burn-down
 
-Dashboard + base SQL template showing how Prodigy is burning down their pre-paid DBU pool per month, broken out by workload / SKU group, based on Databricks `system.billing` system tables.
+Dashboard + base SQL template showing how a customer is burning down their pre-paid DBU pool per month, broken out by workload / SKU group, based on Databricks `system.billing` system tables.
 
-## What's deployed (reference instance)
+## What you edit before running
 
-| Artifact | Link |
-|---|---|
-| Dashboard | https://fevm-dazana-classic-ws.cloud.databricks.com/dashboardsv3/01f140018f0616dfbd74c3c3ac926c4b |
-| Published | https://fevm-dazana-classic-ws.cloud.databricks.com/dashboardsv3/01f140018f0616dfbd74c3c3ac926c4b/published |
-| Base SQL | `prodigy_burndown.sql` (this repo) |
+All customer-specific values are **parameterized** — you supply them at build time. There are no hardcoded workspace IDs, paths, or contract values shipped in this repo.
 
-> The reference instance runs against `dazana-classic-ws`'s own `system.billing.usage`. It's a real burn calculation — it will just use this workspace's DBU activity as a stand-in until the artifacts are installed in Prodigy's workspace.
+### Contract terms
 
-## What the customer edits
+The two CTEs at the top of every query (`contract`, `discounts`) drive every widget. You supply them in one of two ways:
 
-Every widget is built on top of two CTEs at the top of each query. To onboard Prodigy, edit these two blocks and redeploy:
+**Option A — `prodigy_burndown.sql` (ad-hoc runs):** Open the file and replace the placeholder tokens in the `contract` and `discounts` CTEs:
 
 ```sql
 WITH contract AS (
   SELECT
-    DATE '2025-01-01'        AS contract_start,          -- contract effective date
-    3                         AS contract_years,          -- term in years
-    CAST(3000000  AS DOUBLE) AS contract_amount_usd,     -- total $ signed
-    CAST(1000000  AS DOUBLE) AS expected_annual_dbu_usd  -- expected annual burn
+    DATE '<contract_start_date>'                AS contract_start,          -- YYYY-MM-DD
+    <contract_term_in_years>                     AS contract_years,          -- e.g. 3
+    CAST(<total_contract_amount_usd>  AS DOUBLE) AS contract_amount_usd,     -- e.g. 3000000
+    CAST(<expected_annual_burn_usd>   AS DOUBLE) AS expected_annual_dbu_usd  -- e.g. 1000000
 ),
 discounts AS (
   SELECT * FROM (VALUES
-    ('ALL_PURPOSE', 0.25),
-    ('JOBS',        0.30),
-    ('DLT',         0.30),
-    ('SQL',         0.35),
-    ('MODEL_SERVING', 0.20),
+    ('ALL_PURPOSE',   0.00),    -- replace 0.00 with the negotiated fractional discount
+    ('JOBS',          0.00),
+    ('DLT',           0.00),
     -- ... etc ...
   ) AS d(product_group, discount_pct)
 )
 ```
 
-- `contract`: one row, contract metadata. Burn-down line and % consumed are derived from these numbers.
-- `discounts`: one row per Databricks product group (`billing_origin_product` value) with the fractional list-price discount from Prodigy's MSA. Unlisted groups default to 0% discount via `COALESCE`.
+**Option B — `build_dashboard.py` (dashboard build):** Pass contract values as CLI args or env vars. The discount table is still inlined in `CORE_CTE` inside the script — edit those numbers there.
+
+### Workspace / deployment values
+
+| Value | CLI flag | Env var | Notes |
+|---|---|---|---|
+| SQL warehouse ID | `--warehouse-id` | `DBU_WAREHOUSE_ID` | Workspace warehouse the dashboard queries run on |
+| Workspace parent folder | `--parent-path` | `DBU_PARENT_PATH` | e.g. `/Users/you@example.com` |
+| Databricks CLI profile | `--profile` | `DBU_PROFILE` | Used by deploy commands below |
+| Output payload path | `--output` | `DBU_OUTPUT_PATH` | Defaults to `./dashboard_payload.json` |
+| Lakeview builder path | `--lakeview-builder-path` | `LAKEVIEW_BUILDER_PATH` | Path to the `lakeview_builder` module (defaults to the vibe marketplace location under `$HOME/.vibe/...`) |
 
 ## What the dashboard shows
 
@@ -48,7 +51,7 @@ discounts AS (
 - Expected straight-line burn (contract $ / term)
 - Contract budget ceiling
 
-When actual climbs above expected, Prodigy is burning faster than planned; if it crosses the budget line before contract end, they'll need a top-up.
+When actual climbs above expected, the customer is burning faster than planned; if it crosses the budget line before contract end, they'll need a top-up.
 
 **Row 3 — Monthly breakdown**
 - Stacked monthly bar: contract $ by product group per month
@@ -68,31 +71,46 @@ where:
 - `discount_pct` comes from the `discounts` CTE via `billing_origin_product`
 
 Key accuracy notes:
-- We use `billing_origin_product` (coarse grouping) for discount lookup because discounts are typically negotiated at the workload level, not the line-item SKU level. If Prodigy's MSA negotiates at SKU-level, change the join to `sku_name`.
-- We use `pricing.default` (published list price). If Prodigy wants to use `pricing.effective_list.default` (which resolves promotional pricing), swap that field.
-- We filter usage to the contract window only — pre-contract consumption won't count against burn-down.
+- We use `billing_origin_product` (coarse grouping) for discount lookup because discounts are typically negotiated at the workload level, not the line-item SKU level. If your MSA negotiates at SKU-level, change the join to `sku_name`.
+- We use `pricing.default` (published list price). If you want to use `pricing.effective_list.default` (which resolves promotional pricing), swap that field.
+- Usage is filtered to the contract window — pre-contract consumption won't count against burn-down.
 - The cumulative burn-down uses a calendar-spined series so weekends/zero-usage days don't create visual gaps.
 
-## Deploying to Prodigy's workspace
+## Building the dashboard payload
 
-1. Share `prodigy_burndown.sql` with Prodigy — they edit the `contract` and `discounts` CTEs with their real values.
-2. Export this dashboard as JSON and import into Prodigy's workspace:
-   ```
-   databricks api get /api/2.0/lakeview/dashboards/01f140018f0616dfbd74c3c3ac926c4b \
-     --profile Dazana-classic-ws-pat -o json > dashboard.json
+```bash
+python3 build_dashboard.py \
+  --warehouse-id <your_warehouse_id> \
+  --parent-path /Users/you@example.com \
+  --profile <your_cli_profile> \
+  --contract-start 2025-01-01 \
+  --contract-years 3 \
+  --contract-amount 3000000 \
+  --expected-annual-burn 1000000 \
+  --output ./dashboard_payload.json
+```
 
-   # In their workspace (after they edit the serialized_dashboard for their contract values):
-   databricks api post /api/2.0/lakeview/dashboards --profile <their_profile> \
-     --json @dashboard.json
+Or set the equivalent env vars (`DBU_WAREHOUSE_ID`, `DBU_PARENT_PATH`, `DBU_PROFILE`, `DBU_CONTRACT_START`, `DBU_CONTRACT_YEARS`, `DBU_CONTRACT_AMOUNT`, `DBU_EXPECTED_ANNUAL_BURN`) and run without flags.
+
+The generated `dashboard_payload.json` is intentionally **not** checked in (see `.gitignore`) — it bakes in customer-specific contract values and workspace IDs and should be produced per-deployment.
+
+## Deploying
+
+1. Edit the discount values inside `build_dashboard.py` (or `prodigy_burndown.sql`) to reflect the customer's negotiated rates.
+2. Run `build_dashboard.py` with the customer's contract terms and target workspace's warehouse ID + parent path (see above).
+3. Post the generated payload to the customer's workspace:
+   ```bash
+   databricks api post /api/2.0/lakeview/dashboards \
+     --profile <your_cli_profile> \
+     --json @dashboard_payload.json
    ```
-3. Or: run `python3 build_dashboard.py` after editing the `CORE_CTE` string in that script with their values, then post the payload against their workspace.
 
 ## Files
 
 ```
-prodigy_burndown/
+.
 ├── README.md              # this file
 ├── prodigy_burndown.sql   # the stand-alone base query (for ad-hoc runs)
 ├── build_dashboard.py     # script that assembles the Lakeview JSON
-└── dashboard_payload.json # assembled dashboard payload (generated)
+└── dashboard_payload.json # assembled dashboard payload (generated; gitignored)
 ```
